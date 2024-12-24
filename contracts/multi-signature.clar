@@ -227,6 +227,95 @@
     )
 )
 
+(define-public (change-transaction-recipient (transaction-id uint) (new-recipient principal))
+    (let
+        ((transaction (unwrap! (map-get? transaction-records transaction-id) ERR-NOT-AUTHORIZED)))
+        ;; Ensure transaction is still pending
+        (asserts! (not (get executed transaction)) ERR-ALREADY-EXECUTED)
+        (asserts! (not (get canceled transaction)) ERR-ALREADY-CANCELED)
+        (map-set transaction-records transaction-id (merge transaction {recipient: new-recipient}))
+        (ok true)
+    )
+)
+
+(define-public (change-transaction-amount (transaction-id uint) (new-amount uint))
+    (let
+        ((transaction (unwrap! (map-get? transaction-records transaction-id) ERR-NOT-AUTHORIZED)))
+        ;; Ensure transaction is still pending
+        (asserts! (not (get executed transaction)) ERR-ALREADY-EXECUTED)
+        (asserts! (not (get canceled transaction)) ERR-ALREADY-CANCELED)
+        (map-set transaction-records transaction-id (merge transaction {amount: new-amount}))
+        (ok true)
+    )
+)
+
+(define-public (create-new-contract (contract-name (string-ascii 100)))
+    (begin
+        ;; Ensure the caller is an authorized owner
+        (asserts! (is-authorized-owner tx-sender) ERR-NOT-AUTHORIZED)
+        ;; Create a new contract instance
+        ;; Further contract creation logic could go here
+        (ok contract-name)
+    )
+)
+
+(define-public (check-enough-signatures (transaction-id uint))
+    (let
+        ((transaction (unwrap! (map-get? transaction-records transaction-id) ERR-NOT-AUTHORIZED)))
+        (asserts! (>= (get signatures-count transaction) (var-get approval-threshold)) ERR-INSUFFICIENT_SIGNATURES)
+        (ok true)
+    )
+)
+
+(define-public (update-transaction-recipient (transaction-id uint) (new-recipient principal))
+    (let
+        ((transaction (unwrap! (map-get? transaction-records transaction-id) ERR-NOT-AUTHORIZED)))
+        ;; Ensure the transaction is still pending
+        (asserts! (not (get executed transaction)) ERR-ALREADY-EXECUTED)
+        (asserts! (not (get canceled transaction)) ERR-ALREADY-CANCELED)
+        ;; Update the recipient
+        (map-set transaction-records transaction-id (merge transaction {recipient: new-recipient}))
+        (ok true)
+    )
+)
+
+(define-public (set-max-transaction-limit (new-limit uint))
+    (begin
+        ;; Ensure the caller is an authorized owner
+        (asserts! (is-authorized-owner tx-sender) ERR-NOT-AUTHORIZED)
+        ;; Set the new limit (add logic to use the limit where needed)
+        (ok true)
+    )
+)
+
+(define-public (enable-emergency-mode)
+    (begin
+        ;; Ensure the caller is an authorized owner
+        (asserts! (is-authorized-owner tx-sender) ERR-NOT-AUTHORIZED)
+        ;; Activate emergency mode logic
+        (ok true)
+    )
+)
+
+(define-public (disable-emergency-mode)
+    (begin
+        ;; Ensure the caller is an authorized owner
+        (asserts! (is-authorized-owner tx-sender) ERR-NOT-AUTHORIZED)
+        ;; Deactivate emergency mode logic
+        (ok true)
+    )
+)
+
+(define-public (set-transaction-amount-threshold (new-threshold uint))
+    (begin
+        ;; Ensure the caller is an authorized owner
+        (asserts! (is-authorized-owner tx-sender) ERR-NOT-AUTHORIZED)
+        ;; Set the new threshold (use it in transaction checks)
+        (ok true)
+    )
+)
+
+;; Read-Only Functions
 ;; Read-only function to check if a transaction has been executed
 (define-read-only (is-transaction-executed (transaction-id uint))
     (match (map-get? transaction-records transaction-id)
@@ -256,4 +345,18 @@
 ;; Read-only function to validate whether the recipient is a valid principal (not the sender)
 (define-read-only (is-valid-recipient (recipient principal))
     (not (is-eq recipient (as-contract tx-sender)))
+)
+
+(define-read-only (is-emergency-mode-active)
+    ;; Return status of emergency mode (implement as state variable)
+    false
+)
+
+(define-read-only (get-transaction (transaction-id uint))
+    (map-get? transaction-records transaction-id)
+)
+
+(define-read-only (is-contract-active)
+    ;; Return contract active status (implement as state variable)
+    true
 )
