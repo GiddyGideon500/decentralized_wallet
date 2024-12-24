@@ -315,6 +315,85 @@
     )
 )
 
+
+
+(define-public (upgrade-contract (new-contract principal))
+    (begin
+        ;; Ensure the caller is an authorized owner
+        (asserts! (is-authorized-owner tx-sender) ERR-NOT-AUTHORIZED)
+        ;; Upgrade contract logic (can include versioning, etc.)
+        (ok true)
+    )
+)
+
+;; Function to revoke a signature for a transaction
+(define-public (revoke-signature (transaction-id uint))
+    (let ((transaction (unwrap! (map-get? transaction-records transaction-id) ERR-NOT-AUTHORIZED)))
+        ;; Ensure the caller is an authorized owner
+        (asserts! (is-authorized-owner tx-sender) ERR-NOT-AUTHORIZED)
+        ;; Ensure the transaction is still pending
+        (asserts! (not (get executed transaction)) ERR-ALREADY-EXECUTED)
+        (asserts! (not (get canceled transaction)) ERR-ALREADY-CANCELED)
+        ;; Revoke the signature
+        (map-set transaction-signatures {transaction-id: transaction-id, owner: tx-sender} false)
+        (map-set transaction-records transaction-id (merge transaction {signatures-count: (- (get signatures-count transaction) u1)}))
+        (ok true)
+    )
+)
+
+;; Function to log an event for transaction submission
+(define-public (log-transaction-event (transaction-id uint))
+    (let ((transaction (unwrap! (map-get? transaction-records transaction-id) ERR-NOT-AUTHORIZED)))
+        (asserts! (not (get executed transaction)) ERR-ALREADY-EXECUTED)
+        (asserts! (not (get canceled transaction)) ERR-ALREADY-CANCELED)
+        ;; Log event (stub implementation for future logging)
+        (ok "Transaction event logged")
+    )
+)
+
+;; Function to remove a pending transaction before execution
+(define-public (remove-pending-transaction (transaction-id uint))
+    (let ((transaction (unwrap! (map-get? transaction-records transaction-id) ERR-NOT-AUTHORIZED)))
+        (asserts! (not (get executed transaction)) ERR-ALREADY-EXECUTED)
+        (asserts! (not (get canceled transaction)) ERR-ALREADY-CANCELED)
+        (map-set transaction-records transaction-id (merge transaction {canceled: true}))
+        (ok true)
+    )
+)
+
+;; Function to get the current limit on the number of owners
+(define-public (get-owner-limit)
+    (ok u20) ;; Default limit, can be adjusted as needed
+)
+
+;; Function to check if the contract is frozen
+(define-public (is-contract-frozen)
+    (begin
+        ;; Check if the contract is frozen (using a state variable for the contract's frozen state)
+        ;; (Further implementation needed to track the frozen state)
+        (ok false)  ;; Return false as a placeholder, assuming the contract is not frozen
+    )
+)
+
+;; Function to withdraw STX from the contract (only authorized owners can withdraw)
+(define-public (withdraw-stx (amount uint))
+    (begin
+        ;; Ensure the caller is an authorized owner
+        (asserts! (is-authorized-owner tx-sender) ERR-NOT-AUTHORIZED)
+
+        ;; Ensure the amount is positive and valid
+        (asserts! (> amount u0) ERR-INVALID_AMOUNT)
+
+        ;; Attempt to transfer the STX
+        (match (stx-transfer? amount (as-contract tx-sender) (as-contract tx-sender))
+            success (ok true)
+            error ERR-TRANSFER_FAILED
+        )
+    )
+)
+
+
+
 ;; Read-Only Functions
 ;; Read-only function to check if a transaction has been executed
 (define-read-only (is-transaction-executed (transaction-id uint))
