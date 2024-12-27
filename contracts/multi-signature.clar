@@ -46,25 +46,6 @@
     bool
 )
 
-;; Initialize the contract with a list of owners and an approval threshold
-(define-public (initialize (owners-list-param (list 20 principal)) (threshold uint))
-    (begin
-        ;; Ensure the threshold is valid (greater than 0 and less than or equal to the number of owners)
-        (asserts! (>= threshold u1) ERR-INVALID-THRESHOLD)
-        (asserts! (<= threshold (len owners-list-param)) ERR-INVALID-THRESHOLD)
-        
-        ;; Set the approval threshold
-        (var-set approval-threshold threshold)
-        
-        ;; Clear any existing owners (if reinitializing)
-        (var-set owners-list (list))
-        
-        ;; Register each authorized owner
-        (map register-owners owners-list-param)
-        (ok true)
-    )
-)
-
 ;; Private helper function to register an owner in the authorized owners list
 (define-private (register-owners (owner principal))
     (begin
@@ -81,52 +62,9 @@
     )
 )
 
-;; Public function to add a new owner (can only be done by existing owners)
-(define-public (add-owner (new-owner principal))
-    (let 
-        (
-            (current-owners (var-get owners-list))
-        )
-        ;; Ensure the caller is an existing owner
-        (asserts! (or 
-            (is-authorized-owner tx-sender) 
-            (is-eq (len current-owners) u0)
-        ) ERR-NOT-AUTHORIZED)
-        
-        ;; Check if owner already exists
-        (asserts! (not (is-authorized-owner new-owner)) ERR-DUPLICATE_SIGNATURE)
-        
-        ;; Ensure we don't exceed the maximum number of owners
-        (asserts! (< (len current-owners) u20) ERR-OWNERS-LIST-FULL)
-        
-        ;; Add owner to the map and list
-        (map-set authorized-owners new-owner true)
-        (var-set owners-list 
-            (unwrap! 
-                (as-max-len? 
-                    (append current-owners new-owner) 
-                    u20
-                ) 
-                ERR-OWNERS-LIST-FULL
-            )
-        )
-        (ok true)
-    )
-)
-
 ;; Verify if the given account is an authorized owner
 (define-private (is-authorized-owner (account principal))
     (default-to false (map-get? authorized-owners account))
-)
-
-;; Read-only function to retrieve the list of all authorized owners
-(define-read-only (get-authorized-owners)
-    (var-get owners-list)
-)
-
-;; Read-only function to check the total number of authorized owners
-(define-read-only (get-owners-count)
-    (len (var-get owners-list))
 )
 
 ;; Submit a new transaction for approval by authorized owners
@@ -157,6 +95,58 @@
         ;; Increment the transaction ID for future submissions
         (var-set current-transaction-id (+ transaction-id u1))
         (ok transaction-id)
+    )
+)
+
+;; Initialize the contract with a list of owners and an approval threshold
+(define-public (initialize (owners-list-param (list 20 principal)) (threshold uint))
+    (begin
+        ;; Ensure the threshold is valid (greater than 0 and less than or equal to the number of owners)
+        (asserts! (>= threshold u1) ERR-INVALID-THRESHOLD)
+        (asserts! (<= threshold (len owners-list-param)) ERR-INVALID-THRESHOLD)
+
+        ;; Set the approval threshold
+        (var-set approval-threshold threshold)
+
+        ;; Clear any existing owners (if reinitializing)
+        (var-set owners-list (list))
+
+        ;; Register each authorized owner
+        (map register-owners owners-list-param)
+        (ok true)
+    )
+)
+
+;; Public function to add a new owner (can only be done by existing owners)
+(define-public (add-owner (new-owner principal))
+    (let 
+        (
+            (current-owners (var-get owners-list))
+        )
+        ;; Ensure the caller is an existing owner
+        (asserts! (or 
+            (is-authorized-owner tx-sender) 
+            (is-eq (len current-owners) u0)
+        ) ERR-NOT-AUTHORIZED)
+
+        ;; Check if owner already exists
+        (asserts! (not (is-authorized-owner new-owner)) ERR-DUPLICATE_SIGNATURE)
+
+        ;; Ensure we don't exceed the maximum number of owners
+        (asserts! (< (len current-owners) u20) ERR-OWNERS-LIST-FULL)
+
+        ;; Add owner to the map and list
+        (map-set authorized-owners new-owner true)
+        (var-set owners-list 
+            (unwrap! 
+                (as-max-len? 
+                    (append current-owners new-owner) 
+                    u20
+                ) 
+                ERR-OWNERS-LIST-FULL
+            )
+        )
+        (ok true)
     )
 )
 
@@ -224,6 +214,81 @@
         ;; Mark transaction as canceled
         (map-set transaction-records transaction-id (merge transaction {canceled: true}))
         (ok true)
+    )
+)
+
+;; Function to update the approval threshold
+(define-public (set-approval-threshold (new-threshold uint))
+    (begin
+        ;; Ensure the caller is an authorized owner
+        (asserts! (is-authorized-owner tx-sender) ERR-NOT-AUTHORIZED)
+        ;; Ensure the new threshold is valid
+        (asserts! (>= new-threshold u1) ERR-INVALID-THRESHOLD)
+        (asserts! (<= new-threshold (len (var-get owners-list))) ERR-INVALID-THRESHOLD)
+        ;; Set the new approval threshold
+        (var-set approval-threshold new-threshold)
+        (ok true)
+    )
+)
+
+;; Function to update the amount of a pending transaction
+(define-public (update-transaction-amount (transaction-id uint) (new-amount uint))
+    (let
+        ((transaction (unwrap! (map-get? transaction-records transaction-id) ERR-NOT-AUTHORIZED)))
+        ;; Ensure the transaction is still pending
+        (asserts! (not (get executed transaction)) ERR-ALREADY-EXECUTED)
+        (asserts! (not (get canceled transaction)) ERR-ALREADY-CANCELED)
+        ;; Update the amount
+        (map-set transaction-records transaction-id (merge transaction {amount: new-amount}))
+        (ok true)
+    )
+)
+
+;; Function to freeze the contract, preventing any further transactions
+(define-public (freeze-contract)
+    (begin
+        ;; Ensure the caller is an authorized owner
+        (asserts! (is-authorized-owner tx-sender) ERR-NOT-AUTHORIZED)
+        ;; Mark the contract as frozen (this could be implemented as a state variable)
+        ;; Further logic to freeze the contract can be added here
+        (ok true)
+    )
+)
+
+;; Function to unfreeze the contract
+(define-public (unfreeze-contract)
+    (begin
+        ;; Ensure the caller is an authorized owner
+        (asserts! (is-authorized-owner tx-sender) ERR-NOT-AUTHORIZED)
+        ;; Mark the contract as unfrozen (this could be implemented as a state variable)
+        ;; Further logic to unfreeze the contract can be added here
+        (ok true)
+    )
+)
+
+;; Function to check if a transaction exceeds a certain limit
+(define-public (check-transaction-limit (transaction-id uint) (limit uint))
+    (let
+        ((transaction (unwrap! (map-get? transaction-records transaction-id) ERR-NOT-AUTHORIZED)))
+        (asserts! (<= (get amount transaction) limit) ERR-INVALID_AMOUNT)
+        (ok true)
+    )
+)
+
+;; Function to pause the contract temporarily
+(define-public (pause-contract)
+    (begin
+        ;; Ensure the caller is an authorized owner
+        (asserts! (is-authorized-owner tx-sender) ERR-NOT-AUTHORIZED)
+        ;; Logic to pause the contract can be added here
+        (ok true)
+    )
+)
+
+(define-public (get-signatures-count (transaction-id uint))
+    (let
+        ((transaction (unwrap! (map-get? transaction-records transaction-id) ERR-NOT-AUTHORIZED)))
+        (ok (get signatures-count transaction))
     )
 )
 
@@ -315,8 +380,6 @@
     )
 )
 
-
-
 (define-public (upgrade-contract (new-contract principal))
     (begin
         ;; Ensure the caller is an authorized owner
@@ -392,7 +455,79 @@
     )
 )
 
+;; Function to get the current transaction ID (useful for generating new transactions)
+(define-public (get-current-transaction-id)
+    (ok (var-get current-transaction-id))
+)
 
+;; Function to reset the current transaction ID (for emergency or reinitialization)
+(define-public (reset-transaction-id)
+    (begin
+        ;; Ensure the caller is an authorized owner
+        (asserts! (is-authorized-owner tx-sender) ERR-NOT-AUTHORIZED)
+
+        ;; Reset the transaction ID to 0
+        (var-set current-transaction-id u0)
+        (ok true)
+    )
+)
+
+;; Function to check if the transaction is in a "pending" state
+(define-public (is-transaction-pending (transaction-id uint))
+    (let
+        ((transaction (unwrap! (map-get? transaction-records transaction-id) ERR-NOT-AUTHORIZED)))
+        (ok (and (not (get executed transaction)) (not (get canceled transaction))))
+    )
+)
+
+;; Function to get the number of signatures on a transaction
+(define-public (get-signature-count (transaction-id uint))
+    (let
+        ((transaction (unwrap! (map-get? transaction-records transaction-id) ERR-NOT-AUTHORIZED)))
+        (ok (get signatures-count transaction))
+    )
+)
+
+;; Function to enable an emergency pause mechanism for transactions
+(define-public (emergency-pause)
+    (begin
+        ;; Ensure the caller is an authorized owner
+        (asserts! (is-authorized-owner tx-sender) ERR-NOT-AUTHORIZED)
+
+        ;; Implement logic to pause the contract's functionality
+        (ok true)
+    )
+)
+
+;; Function to resume the contract after an emergency pause
+(define-public (emergency-resume)
+    (begin
+        ;; Ensure the caller is an authorized owner
+        (asserts! (is-authorized-owner tx-sender) ERR-NOT-AUTHORIZED)
+
+        ;; Implement logic to resume the contract's functionality
+        (ok true)
+    )
+)
+
+;; Function to set a limit on transaction amounts (for added security)
+(define-public (set-transaction-limit (limit uint))
+    (begin
+        ;; Ensure the caller is an authorized owner
+        (asserts! (is-authorized-owner tx-sender) ERR-NOT-AUTHORIZED)
+
+        ;; Set a global transaction limit (further implementation needed)
+        (ok true)
+    )
+)
+
+;; Function to check if a transaction has been approved by enough owners
+(define-public (is-transaction-approved (transaction-id uint))
+    (let
+        ((transaction (unwrap! (map-get? transaction-records transaction-id) ERR-NOT-AUTHORIZED)))
+        (ok (>= (get signatures-count transaction) (var-get approval-threshold)))
+    )
+)
 
 ;; Read-Only Functions
 ;; Read-only function to check if a transaction has been executed
@@ -438,4 +573,14 @@
 (define-read-only (is-contract-active)
     ;; Return contract active status (implement as state variable)
     true
+)
+
+;; Read-only function to retrieve the list of all authorized owners
+(define-read-only (get-authorized-owners)
+    (var-get owners-list)
+)
+
+;; Read-only function to check the total number of authorized owners
+(define-read-only (get-owners-count)
+    (len (var-get owners-list))
 )
